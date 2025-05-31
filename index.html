@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Крестики-нолики</title>
+  <style>
+    body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #f5f7fa, #c3cfe2); display: flex; align-items: center; justify-content: center; height: 100vh; }
+    .container { text-align: center; }
+    h1 { margin-bottom: 20px; color: #333; }
+    #settings { margin-bottom: 20px; }
+    #game { display: grid; gap: 5px; margin: 0 auto; }
+    .cell { background: #fff; border: 2px solid #333; width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 2rem; cursor: pointer; transition: background 0.3s, transform 0.3s; }
+    .cell:hover { background: #f0f0f0; transform: scale(1.05); }
+    #status { margin-top: 20px; font-size: 1.2rem; color: #555; }
+    button { padding: 10px 20px; font-size: 1rem; background: #4caf50; border: none; color: white; border-radius: 5px; cursor: pointer; transition: background 0.3s; }
+    button:hover { background: #45a049; }
+    input[type="number"] { padding: 5px; font-size: 1rem; width: 50px; text-align: center; border: 1px solid #ccc; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Крестики-нолики</h1>
+    <div id="settings">
+      Размер поля: <input type="number" id="boardSize" value="3" min="3" max="10">
+      <button id="startBtn">Начать игру</button>
+    </div>
+    <div id="game"></div>
+    <div id="status"></div>
+  </div>
+  <script>
+    let board = [], boardSize, gameOver, currentPlayer;
+    function initGame() {
+      boardSize = parseInt(document.getElementById("boardSize").value);
+      board = Array(boardSize).fill().map(() => Array(boardSize).fill(""));
+      currentPlayer = "X";
+      gameOver = false;
+      const gameDiv = document.getElementById("game");
+      gameDiv.innerHTML = "";
+      gameDiv.style.gridTemplateColumns = "repeat(" + boardSize + ", 80px)";
+      for (let i = 0; i < boardSize; i++) {
+        for (let j = 0; j < boardSize; j++) {
+          let cell = document.createElement("div");
+          cell.className = "cell";
+          cell.dataset.row = i;
+          cell.dataset.col = j;
+          cell.addEventListener("click", playerMove);
+          gameDiv.appendChild(cell);
+        }
+      }
+      document.getElementById("status").textContent = "Ход игрока";
+    }
+    function playerMove(e) {
+      if (gameOver) return;
+      let row = e.target.dataset.row, col = e.target.dataset.col;
+      if (board[row][col] !== "") return;
+      board[row][col] = "X";
+      e.target.textContent = "X";
+      if (checkWin("X")) {
+        document.getElementById("status").textContent = "Вы выиграли!";
+        gameOver = true;
+        return;
+      }
+      if (isDraw()) {
+        document.getElementById("status").textContent = "Ничья!";
+        gameOver = true;
+        return;
+      }
+      document.getElementById("status").textContent = "Ход компьютера";
+      setTimeout(computerMove, 300);
+    }
+    function computerMove() {
+      if (gameOver) return;
+      let moves = [];
+      for (let i = 0; i < boardSize; i++) {
+        for (let j = 0; j < boardSize; j++) {
+          if (board[i][j] === "") moves.push({ i, j });
+        }
+      }
+      if (moves.length === 0) return;
+      let move = moves[Math.floor(Math.random() * moves.length)];
+      board[move.i][move.j] = "O";
+      const cells = document.querySelectorAll(".cell");
+      cells.forEach(cell => {
+        if (cell.dataset.row == move.i && cell.dataset.col == move.j) cell.textContent = "O";
+      });
+      if (checkWin("O")) {
+        document.getElementById("status").textContent = "Компьютер выиграл!";
+        gameOver = true;
+        return;
+      }
+      if (isDraw()) {
+        document.getElementById("status").textContent = "Ничья!";
+        gameOver = true;
+        return;
+      }
+      document.getElementById("status").textContent = "Ход игрока";
+    }
+    function checkWin(player) {
+      for (let i = 0; i < boardSize; i++) {
+        if (board[i].every(cell => cell === player)) return true;
+      }
+      for (let j = 0; j < boardSize; j++) {
+        let win = true;
+        for (let i = 0; i < boardSize; i++) {
+          if (board[i][j] !== player) { win = false; break; }
+        }
+        if (win) return true;
+      }
+      let win = true;
+      for (let i = 0; i < boardSize; i++) {
+        if (board[i][i] !== player) { win = false; break; }
+      }
+      if (win) return true;
+      win = true;
+      for (let i = 0; i < boardSize; i++) {
+        if (board[i][boardSize - 1 - i] !== player) { win = false; break; }
+      }
+      if (win) return true;
+      return false;
+    }
+    function isDraw() {
+      for (let i = 0; i < boardSize; i++) {
+        for (let j = 0; j < boardSize; j++) {
+          if (board[i][j] === "") return false;
+        }
+      }
+      return true;
+    }
+    document.getElementById("startBtn").addEventListener("click", initGame);
+    initGame();
+  </script>
+</body>
+</html>
