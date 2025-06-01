@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Крестики-нолики (Онлайн)</title>
+    <style>
+        #game {
+            display: grid;
+            gap: 5px;
+            margin: 20px auto;
+            max-width: 800px;
+        }
+        .cell {
+            width: 80px;
+            height: 80px;
+            border: 1px solid #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            cursor: pointer;
+        }
+        .controls {
+            margin: 20px;
+        }
+        #onlineControls {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <label>Размер поля: </label>
+        <select id="boardSize">
+            <option value="3">3x3</option>
+            <option value="4">4x4</option>
+            <option value="5">5x5</option>
+        </select>
+        <button id="startBtn">Новая игра (локально)</button>
+        <div id="onlineControls">
+            <button id="createGameBtn">Создать онлайн-игру</button>
+            <button id="joinGameBtn">Присоединиться к игре</button>
+            <input type="text" id="gameIdInput" placeholder="ID игры">
+            <div id="gameIdDisplay"></div>
+        </div>
+    </div>
+    <div id="status">Ход игрока</div>
+    <div id="game"></div>
+
+    <script>
+        let board = [], boardSize, gameOver, currentPlayer;
+        let socket;
+        let isOnlineGame = false;
+        let gameId = null;
+        let playerSymbol = 'X';
+        let isMyTurn = true;
+
+        // Инициализация WebSocket соединения
+        function initWebSocket() {
+            // В реальном приложении замените на ваш WebSocket сервер
+            socket = new WebSocket('wss://your-websocket-server.com');
+            
+            socket.onopen = function(e) {
+                console.log("WebSocket соединение установлено");
+            };
+            
+            socket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleOnlineMessage(data);
+            };
+            
+            socket.onclose = function(event) {
+                if (event.wasClean) {
+                    console.log(`Соединение закрыто чисто, код=${event.code} причина=${event.reason}`);
+                } else {
+                    console.log('Соединение прервано');
+                }
+            };
+            
+            socket.onerror = function(error) {
+                console.log(`Ошибка: ${error.message}`);
+            };
+        }
+
+        // Обработка сообщений от сервера
+        function handleOnlineMessage(data) {
+            switch(data.type) {
+                case 'gameCreated':
+                    gameId = data.gameId;
+                    document.getElementById('gameIdDisplay').textContent = `ID игры: ${gameId}`;
+                    playerSymbol = 'X';
+                    isMyTurn = true;
+                    break;
+                    
+                case 'gameJoined':
+                    gameId = data.gameId;
+                    playerSymbol = 'O';
+                    isMyTurn = false;
+                    document.getElementById('status').textContent = 'Ожидаем ход соперника';
+                    break;
+                    
+                case 'move':
+                    if (data.player !== playerSymbol) {
+                        const row = data.row;
+                        const col = data.col;
+                        board[row][col] = data.player;
+                        updateBoard();
+                        isMyTurn = true;
+                        document.getElementById('status').textContent = 'Ваш ход';
+                        
+                        if (checkWin(data.player)) {
+                            document.getElementById('status').textContent = 'Вы проиграли!';
+                            gameOver = true;
+                        } else if (isDraw()) {
+                            document.getElementById('status').textContent = 'Ничья!';
+                            gameOver = true;
+                        }
+                    }
+                    break;
+                    
+                case 'gameOver':
+                    gameOver = true;
+                    if (data.winner === playerSymbol) {
+                        document.getElementById('status').textContent = 'Вы выиграли!';
+                    } else if (data.winner === 'draw') {
+                        document.getElementById('status').textContent = 'Ничья!';
+                    } else {
+                        document.getElementById('status').textContent = 'Вы проиграли!';
+                    }
+                    break;
+            }
+        }
+
+        // Отправка хода на сервер
+        function sendMove(row, col) {
+            if (!isOnlineGame || !socket) return;
+            
+            const moveData = {
+                type: 'move',
+                gameId: gameId,
+                player: playerSymbol,
+                row: row,
+                col: col
+            };
+            
+            socket.send(JSON.stringify(moveData));
+        }
+
+        function initGame() {
+            isOnlineGame = false;
+            boardSize = parseInt(document.getElementById("boardSize").value);
+            board = Array(boardSize).fill().map(() => Array(boardSize).fill(""));
+            currentPlayer = "X";
+            gameOver = false;
+            const gameDiv = document.getElementById("game");
+            gameDiv.innerHTML = "";
+            gameDiv.style.gridTemplateColumns = "repeat(" + boardSize + ", 80px)";
+            
+            for (let i = 0; i < boardSize; i++) {
+                for (let j = 0; j < boardSize; j++) {
+                    let cell = document.createElement("div");
+                    cell.className = "cell";
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener("click", playerMove);
+                    gameDiv.appendChild(cell);
+                }
+            }
+            
+            document.getElementById("status").textContent = "Ход игрока";
+            document.getElementById("gameIdDisplay").textContent = "";
+        }
+
+        function initOnlineGame() {
+            boardSize = parseInt(document.getElementById("boardSize").value);
+            board = Array(boardSize).fill().map(() => Array(boardSize).fill(""));
+            gameOver = false;
+            const gameDiv = document.getElementById("game");
+            gameDiv.innerHTML = "";
+            gameDiv.style.gridTemplateColumns = "repeat(" + boardSize + ", 80px)";
+            
+            for (let i = 0; i < boardSize; i++) {
+                for (let j = 0; j < boardSize; j++) {
+                    let cell = document.createElement("div");
+                    cell.className = "cell";
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener("click", onlinePlayerMove);
+                    gameDiv.appendChild(cell);
+                }
+            }
+        }
+
+        function playerMove(e) {
+            if (gameOver) return;
+            
+            let row = e.target.dataset.row, col = e.target.dataset.col;
+            if (board[row][col] !== "") return;
+            
+            board[row][col] = "X";
+            e.target.textContent = "X";
+            
+            if (checkWin("X")) {
+                document.getElementById("status").textContent = "Вы выиграли!";
+                gameOver = true;
+                return;
+            }
+            
+            if (isDraw()) {
+                document.getElementById("status").textContent = "Ничья!";
+                gameOver = true;
+                return;
+            }
+            
+            document.getElementById("status").textContent = "Ход компьютера";
+            setTimeout(computerMove, 300);
+        }
+
+        function onlinePlayerMove(e) {
+            if (gameOver || !isMyTurn) return;
+            
+            let row = e.target.dataset.row, col = e.target.dataset.col;
+            if (board[row][col] !== "") return;
+            
+            board[row][col] = playerSymbol;
+            e.target.textContent = playerSymbol;
+            sendMove(row, col);
+            isMyTurn = false;
+            
+            if (checkWin(playerSymbol)) {
+                document.getElementById("status").textContent = "Вы выиграли!";
+                gameOver = true;
+                
+                if (socket) {
+                    socket.send(JSON.stringify({
+                        type: 'gameOver',
+                        gameId: gameId,
+                        winner: playerSymbol
+                    }));
+                }
+                return;
+            }
+            
+            if (isDraw()) {
+                document.getElementById("status").textContent = "Ничья!";
+                gameOver = true;
+                
+                if (socket) {
+                    socket.send(JSON.stringify({
+                        type: 'gameOver',
+                        gameId: gameId,
+                        winner: 'draw'
+                    }));
+                }
+                return;
+            }
+            
+            document.getElementById("status").textContent = "Ожидаем ход соперника";
+        }
+
+        function computerMove() {
+            if (gameOver) return;
+            
+            let moves = [];
+            for (let i = 0; i < boardSize; i++) {
+                for (let j = 0; j < boardSize; j++) {
+                    if (board[i][j] === "") moves.push({ i, j });
+                }
+            }
+            
+            if (moves.length === 0) return;
+            
+            let move = moves[Math.floor(Math.random() * moves.length)];
+            board[move.i][move.j] = "O";
+            const cells = document.querySelectorAll(".cell");
+            cells.forEach(cell => {
+                if (cell.dataset.row == move.i && cell.dataset.col == move.j) cell.textContent = "O";
+            });
+            
+            if (checkWin("O")) {
+                document.getElementById("status").textContent = "Компьютер выиграл!";
+                gameOver = true;
+                return;
+            }
+            
+            if (isDraw()) {
+                document.getElementById("status").textContent = "Ничья!";
+                gameOver = true;
+                return;
+            }
+            
+            document.getElementById("status").textContent = "Ход игрока";
+        }
+
+        function updateBoard() {
+            const cells = document.querySelectorAll(".cell");
+            cells.forEach(cell => {
+                const row = cell.dataset.row;
+                const col = cell.dataset.col;
+                cell.textContent = board[row][col];
+            });
+        }
+
+        function checkWin(player) {
+            // Проверка строк
+            for (let i = 0; i < boardSize; i++) {
+                if (board[i].every(cell => cell === player)) return true;
+            }
+            
+            // Проверка столбцов
+            for (let j = 0; j < boardSize; j++) {
+                let win = true;
+                for (let i = 0; i < boardSize; i++) {
+                    if (board[i][j] !== player) { win = false; break; }
+                }
+                if (win) return true;
+            }
+            
+            // Проверка диагоналей
+            let win = true;
+            for (let i = 0; i < boardSize; i++) {
+                if (board[i][i] !== player) { win = false; break; }
+            }
+            if (win) return true;
+            
+            win = true;
+            for (let i = 0; i < boardSize; i++) {
+                if (board[i][boardSize - 1 - i] !== player) { win = false; break; }
+            }
+            return win;
+        }
+
+        function isDraw() {
+            for (let i = 0; i < boardSize; i++) {
+                for (let j = 0; j < boardSize; j++) {
+                    if (board[i][j] === "") return false;
+                }
+            }
+            return true;
+        }
+
+        // Обработчики кнопок
+        document.getElementById("startBtn").addEventListener("click", function() {
+            isOnlineGame = false;
+            initGame();
+        });
+
+        document.getElementById("createGameBtn").addEventListener("click", function() {
+            isOnlineGame = true;
+            initOnlineGame();
+            initWebSocket();
+            // В реальном приложении здесь будет запрос к серверу на создание игры
+            document.getElementById("status").textContent = "Ожидаем соперника...";
+        });
+
+        document.getElementById("joinGameBtn").addEventListener("click", function() {
+            const gameIdToJoin = document.getElementById("gameIdInput").value;
+            if (!gameIdToJoin) return;
+            
+            isOnlineGame = true;
+            initOnlineGame();
+            initWebSocket();
+            // В реальном приложении здесь будет запрос к серверу на подключение к игре
+            document.getElementById("status").textContent = "Подключаемся к игре...";
+        });
+
+        // Инициализация игры при загрузке
+        initGame();
+    </script>
+</body>
+</html>
